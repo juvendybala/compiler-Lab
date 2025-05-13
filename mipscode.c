@@ -16,6 +16,9 @@ void print_mipcode(FILE *f, mipscode *mc)
 {
     switch (mc->num)
     {
+    case 0:
+        fprintf(f, "%s:", mc->op);
+        break;
     case 1:
         fprintf(f, "%s", mc->op);
         break;

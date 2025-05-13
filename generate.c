@@ -16,12 +16,46 @@ mipscodes *transcode2mipscodes(Code *code)
         {
         case IR_LABEL:
             char *label = cur->dest;
-            strcat(label, ":");
-            mipscode *mc = new_mipcode(1, label, NULL, NULL, NULL);
+            mipscode *mc = new_mipcode(0, label, NULL, NULL, NULL);
             addmc2mcs(mc, mcs_line);
             break;
         case IR_FUNC:
-        }
+            char *name = cur->dest;
+            mipscode *mc = new_mipcode(0, name, NULL, NULL, NULL);
+            addmc2mcs(mc, mcs_line);
+            int offset = calculate_offset(cur);
+            sp_offset = offset;
+            mipscode *mc1 = new_mipcode(4, "addi", "$sp,", "$sp,", "-4");
+            addmc2mcs(mc1, mcs_line);
+            mipscode *mc2 = new_mipcode(3, "sw", "$fp,", "0($sp)", NULL);
+            addmc2mcs(mc2, mcs_line);
+            mipscode *mc3 = new_mipcode(3, "la", "$fp,", "4($sp)", NULL);
+            addmc2mcs(mc3, mcs_line);
+            char *c_offset = (char *)malloc(sizeof(char) * 8 + 1);
+            sprintf(c_offset, "-%d", offset);
+            mipscode *mc4 = new_mipcode(4, "addi", "$sp,", "$sp,", c_offset);
+            addmc2mcs(mc4, mcs_line);
+            break;
+        case IR_ASSIGN_1:
+            char *dest = cur->dest;
+            char *arg1 = cur->arg1;
+            if (arg1[0] == '#')
+            {
+                mipscode *mc = new_mipcode(3, "li", "$t0,", arg1 + 1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                char *c_arg1 = find_offset(arg1);
+                mipscode *mc = new_mipcode(3, "lw", "$t0,", c_arg1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            char *c_dest = find_offset(dest);
+            mipscode *mc = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
+            addmc2mcs(mc, mcs_line);
+            break;
+        case IR_ASSIGN_2:
+                }
         appendmcs2mcs(mcs, mcs_line);
         cur = cur->next;
     }
@@ -111,4 +145,21 @@ int calculate_offset(IR *ir)
         cur = cur->next;
     }
     return offset;
+}
+
+char *find_offset(char *name)
+{
+    Var_or_Struct *var = lookup_Vartable(name);
+    assert(var != NULL);
+    int offset = var->offset;
+    if (offset == -1)
+    {
+        return NULL;
+    }
+    else
+    {
+        char *c_offset = (char *)malloc(sizeof(char) * 12 + 1);
+        sprintf(c_offset, "%d($sp)", sp_offset - offset);
+        return c_offset;
+    }
 }
