@@ -55,7 +55,63 @@ mipscodes *transcode2mipscodes(Code *code)
             addmc2mcs(mc, mcs_line);
             break;
         case IR_ASSIGN_2:
-                }
+            char *arg1 = cur->arg1;
+            char *arg2 = cur->arg2;
+            if (arg1[0] == '#')
+            {
+                mipscode *mc = new_mipcode(3, "li", "$t0,", arg1 + 1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                char *c_arg1 = find_offset(arg1);
+                mipscode *mc = new_mipcode(3, "lw", "$t0,", c_arg1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            if (arg2[0] == '#')
+            {
+                mipscode *mc = new_mipcode(3, "li", "$t1,", arg2 + 1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                char *c_arg2 = find_offset(arg2);
+                mipscode *mc = new_mipcode(3, "lw", "$t1,", c_arg2, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            char *op = cur->op;
+            if (strcmp(op, "+") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "add", "$t0,", "$t0,", "$t1");
+                addmc2mcs(mc, mcs_line);
+            }
+            else if (strcmp(op, "-") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "sub", "$t0,", "$t0,", "$t1");
+                addmc2mcs(mc, mcs_line);
+            }
+            else if (strcmp(op, "*") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "mul", "$t0,", "$t0,", "$t1");
+                addmc2mcs(mc, mcs_line);
+            }
+            else if (strcmp(op, "/") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "div", "$t0,", "$t1", NULL);
+                addmc2mcs(mc, mcs_line);
+                mipscode *mc1 = new_mipcode(2, "mflo", "$t0", NULL, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                printf("something went wrong\n");
+                exit(1);
+            }
+            char *c_dest = find_offset(dest);
+            mipscode *mc = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
+            addmc2mcs(mc, mcs_line);
+            break;
+        }
         appendmcs2mcs(mcs, mcs_line);
         cur = cur->next;
     }
