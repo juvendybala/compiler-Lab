@@ -111,7 +111,18 @@ mipscodes *transcode2mipscodes(Code *code)
             mipscode *mc = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
             addmc2mcs(mc, mcs_line);
             break;
-        }
+        case IR_ASSIGN_ADDR:
+            char *arg1 = cur->arg1;
+            char *c_arg1 = find_offset(arg1);
+            mipscode *mc = new_mipcode(3, "la", "$t0,", c_arg1, NULL);
+            addmc2mcs(mc, mcs_line);
+            char *dest = cur->dest;
+            char *c_dest = find_offset(dest);
+            mipscode *mc1 = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
+            addmc2mcs(mc1, mcs_line);
+            break;
+        case IR_ASSIGN_MADDR:
+                }
         appendmcs2mcs(mcs, mcs_line);
         cur = cur->next;
     }
