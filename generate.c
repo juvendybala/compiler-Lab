@@ -1,6 +1,7 @@
 #include "generate.h"
 
-int sp_offset = 0; // 用于计算当前函数栈的总偏移量，减去变量的offset，得到如何在汇编代码中通过sp偏移得到变量的内存位置
+int arg_cnt = 0;   // 记录实参个数
+int param_cnt = 0; // 记录形参个数
 
 mipscodes *transcode2mipscodes(Code *code)
 {
@@ -15,28 +16,34 @@ mipscodes *transcode2mipscodes(Code *code)
         switch (cur->kind)
         {
         case IR_LABEL:
+        {
             char *label = cur->dest;
             mipscode *mc = new_mipcode(0, label, NULL, NULL, NULL);
             addmc2mcs(mc, mcs_line);
-            break;
+        }
+        break;
         case IR_FUNC:
+        {
             char *name = cur->dest;
             mipscode *mc = new_mipcode(0, name, NULL, NULL, NULL);
             addmc2mcs(mc, mcs_line);
             int offset = calculate_offset(cur);
-            sp_offset = offset;
             mipscode *mc1 = new_mipcode(4, "addi", "$sp,", "$sp,", "-4");
             addmc2mcs(mc1, mcs_line);
             mipscode *mc2 = new_mipcode(3, "sw", "$fp,", "0($sp)", NULL);
             addmc2mcs(mc2, mcs_line);
-            mipscode *mc3 = new_mipcode(3, "la", "$fp,", "4($sp)", NULL);
+            mipscode *mc3 = new_mipcode(3, "la", "$fp,", "0($sp)", NULL);
             addmc2mcs(mc3, mcs_line);
             char *c_offset = (char *)malloc(sizeof(char) * 8 + 1);
-            sprintf(c_offset, "-%d", offset);
+            sprintf(c_offset, "%d", -offset);
             mipscode *mc4 = new_mipcode(4, "addi", "$sp,", "$sp,", c_offset);
             addmc2mcs(mc4, mcs_line);
-            break;
+            arg_cnt = 0;
+            param_cnt = 0;
+        }
+        break;
         case IR_ASSIGN_1:
+        {
             char *dest = cur->dest;
             char *arg1 = cur->arg1;
             if (arg1[0] == '#')
@@ -53,8 +60,10 @@ mipscodes *transcode2mipscodes(Code *code)
             char *c_dest = find_offset(dest);
             mipscode *mc = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
             addmc2mcs(mc, mcs_line);
-            break;
+        }
+        break;
         case IR_ASSIGN_2:
+        {
             char *arg1 = cur->arg1;
             char *arg2 = cur->arg2;
             if (arg1[0] == '#')
@@ -107,11 +116,13 @@ mipscodes *transcode2mipscodes(Code *code)
                 printf("something went wrong\n");
                 exit(1);
             }
-            char *c_dest = find_offset(dest);
+            char *c_dest = find_offset(cur->dest);
             mipscode *mc = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
             addmc2mcs(mc, mcs_line);
-            break;
+        }
+        break;
         case IR_ASSIGN_ADDR:
+        {
             char *arg1 = cur->arg1;
             char *c_arg1 = find_offset(arg1);
             mipscode *mc = new_mipcode(3, "la", "$t0,", c_arg1, NULL);
@@ -120,9 +131,264 @@ mipscodes *transcode2mipscodes(Code *code)
             char *c_dest = find_offset(dest);
             mipscode *mc1 = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
             addmc2mcs(mc1, mcs_line);
-            break;
+        }
+        break;
         case IR_ASSIGN_MADDR:
+        {
+            char *arg1 = cur->arg1;
+            char *c_arg1 = find_offset(arg1);
+            mipscode *mc = new_mipcode(3, "lw", "$t0,", c_arg1, NULL);
+            addmc2mcs(mc, mcs_line);
+            mipscode *mc1 = new_mipcode(3, "lw", "$t0,", "0($t0)", NULL);
+            addmc2mcs(mc, mcs_line);
+            char *dest = cur->dest;
+            char *c_dest = find_offset(dest);
+            mipscode *mc2 = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
+            addmc2mcs(mc2, mcs_line);
+        }
+        break;
+        case IR_MADDR_ASSIGN:
+        {
+            char *arg1 = cur->arg1;
+            if (arg1[0] == '#')
+            {
+                mipscode *mc = new_mipcode(3, "li", "$t0,", arg1 + 1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                char *c_arg1 = find_offset(arg1);
+                mipscode *mc = new_mipcode(3, "lw", "$t0,", c_arg1, NULL);
+            }
+            char *dest = cur->dest;
+            char *c_dest = find_offset(dest);
+            mipscode *mc1 = new_mipcode(3, "lw", "$t1,", c_dest, NULL);
+            addmc2mcs(mc1, mcs_line);
+            mipscode *mc2 = new_mipcode(3, "sw", "$t0,", "0($t1)", NULL);
+            addmc2mcs(mc2, mcs_line);
+        }
+        break;
+        case IR_GOTO:
+        {
+            char *dest = cur->dest;
+            mipscode *mc = new_mipcode(2, "j", dest, NULL, NULL);
+            addmc2mcs(mc, mcs_line);
+        }
+        break;
+        case IR_IF_GOTO:
+        {
+            char *arg1 = cur->arg1;
+            char *arg2 = cur->arg2;
+            if (arg1[0] == '#')
+            {
+                mipscode *mc = new_mipcode(3, "li", "$t0,", arg1 + 1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                char *c_arg1 = find_offset(arg1);
+                mipscode *mc = new_mipcode(3, "lw", "$t0,", c_arg1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            if (arg2[0] == '#')
+            {
+                mipscode *mc = new_mipcode(3, "li", "$t1,", arg2 + 1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                char *c_arg2 = find_offset(arg2);
+                mipscode *mc = new_mipcode(3, "lw", "$t1,", c_arg2, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            char *op = cur->op;
+            char *dest = cur->dest;
+            if (strcmp(op, "<") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "blt", "$t0,", "$t1,", dest);
+                addmc2mcs(mc, mcs_line);
+            }
+            else if (strcmp(op, ">") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "bgt", "$t0,", "$t1,", dest);
+                addmc2mcs(mc, mcs_line);
+            }
+            else if (strcmp(op, "<=") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "ble", "$t0,", "$t1,", dest);
+                addmc2mcs(mc, mcs_line);
+            }
+            else if (strcmp(op, "<=") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "bge", "$t0,", "$t1,", dest);
+                addmc2mcs(mc, mcs_line);
+            }
+            else if (strcmp(op, "==") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "beq", "$t0,", "$t1,", dest);
+                addmc2mcs(mc, mcs_line);
+            }
+            else if (strcmp(op, "!=") == 0)
+            {
+                mipscode *mc = new_mipcode(4, "bne", "$t0,", "$t1,", dest);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                printf("Illegal relop\n");
+                exit(1);
+            }
+        }
+        break;
+        case IR_RET:
+        {
+            char *dest = cur->dest;
+            char *c_dest = find_offset(dest);
+            mipscode *mc1 = new_mipcode(3, "lw", "$v0,", c_dest, NULL);
+            addmc2mcs(mc1, mcs_line);
+            mipscode *mc2 = new_mipcode(3, "move", "$sp,", "$fp", NULL);
+            addmc2mcs(mc2, mcs_line);
+            mipscode *mc3 = new_mipcode(3, "lw", "$fp,", "0($sp)", NULL);
+            addmc2mcs(mc3, mcs_line);
+            mipscode *mc4 = new_mipcode(4, "addi", "$sp,", "$sp,", "4");
+            mipscode *mc5 = new_mipcode(2, "jr", "$ra", NULL, NULL);
+            addmc2mcs(mc5, mcs_line);
+        }
+        break;
+        case IR_DEC:
+            break;
+        case IR_ARG:
+        {
+            if (arg_cnt == 0)
+            {
+                IR *arg = cur;
+                while (arg->kind == IR_ARG)
+                {
+                    arg_cnt++;
+                    arg = arg->next;
                 }
+            }
+            char *dest = cur->dest;
+            if (dest[0] == '#')
+            {
+                mipscode *mc = new_mipcode(3, "li", "$t0,", dest + 1, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                char *c_dest = find_offset(dest);
+                mipscode *mc = new_mipcode(3, "lw", "$t0,", c_dest, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            if (arg_cnt >= 5)
+            {
+                // char *offset = (char *)malloc(sizeof(char) * 8 + 1);
+                // sprintf(offset, "-%d($sp)", arg_cnt - 1)
+                mipscode *mc1 = new_mipcode(4, "addi", "$sp,", "$sp", "-4");
+                addmc2mcs(mc1, mcs_line);
+                mipscode *mc2 = new_mipcode(3, "sw", "$t0,", "0($sp)", NULL);
+                addmc2mcs(mc2, mcs_line);
+            }
+            else
+            {
+                char *c_arg = pass_arg(arg_cnt - 1, 0);
+                mipscode *mc = new_mipcode(3, "move", c_arg, "$t0", NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            arg_cnt--;
+        }
+        break;
+        case IR_CALL:
+        {
+            assert(arg_cnt == 0);
+            char *dest = cur->dest;
+            char *arg1 = cur->arg1;
+            mipscode *mc1 = new_mipcode(4, "addi", "$sp,", "$sp,", "-4");
+            addmc2mcs(mc1, mcs_line);
+            mipscode *mc2 = new_mipcode(3, "sw", "$ra,", "0($sp)", NULL);
+            addmc2mcs(mc2, mcs_line);
+            mipscode *mc3 = new_mipcode(2, "jal", arg1, NULL, NULL);
+            addmc2mcs(mc3, mcs_line);
+            mipscode *mc4 = new_mipcode(3, "lw", "$ra,", "0($sp)", NULL);
+            addmc2mcs(mc4, mcs_line);
+            mipscode *mc5 = new_mipcode(4, "addi", "$sp,", "$sp,", "4");
+            addmc2mcs(mc5, mcs_line);
+            FuncType *ft = lookup_Functable(arg1);
+            if (ft->argc >= 5)
+            {
+                char *offset = (char *)malloc(sizeof(char) * 8 + 1);
+                sprintf(offset, "%d", (ft->argc - 4) * 4);
+                mipscode *mc = new_mipcode(4, "addi", "$sp,", "$sp,", offset);
+                addmc2mcs(mc, mcs_line);
+            }
+            mipscode *mc6 = new_mipcode(3, "move", "$t0,", "$v0", NULL);
+            addmc2mcs(mc6, mcs_line);
+            char *c_dest = find_offset(dest);
+            mipscode *mc7 = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
+            addmc2mcs(mc7, mcs_line);
+        }
+        break;
+        case IR_PARAM:
+        {
+            param_cnt++;
+            if (param_cnt <= 4)
+            {
+                char *c_arg = pass_arg(param_cnt - 1, 1);
+                mipscode *mc = new_mipcode(3, "move", "$t0,", c_arg, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            else
+            {
+                char *c_arg = (char *)malloc(sizeof(char) * 8 + 1);
+                sprintf(c_arg, "%d($fp)", (param_cnt - 5) * 4 + 8);
+                mipscode *mc = new_mipcode(3, "lw", "$t0,", c_arg, NULL);
+                addmc2mcs(mc, mcs_line);
+            }
+            char *c_dest = find_offset(cur->dest);
+            mipscode *mc = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
+            addmc2mcs(mc, mcs_line);
+        }
+        break;
+        case IR_READ:
+        {
+            mipscode *mc1 = new_mipcode(4, "addi", "$sp,", "$sp,", "-4");
+            addmc2mcs(mc1, mcs_line);
+            mipscode *mc2 = new_mipcode(3, "sw", "$ra,", "0($sp)", NULL);
+            addmc2mcs(mc2, mcs_line);
+            mipscode *mc3 = new_mipcode(2, "jal", "read", NULL, NULL);
+            addmc2mcs(mc3, mcs_line);
+            mipscode *mc4 = new_mipcode(3, "lw", "$ra,", "0($sp)", NULL);
+            addmc2mcs(mc4, mcs_line);
+            mipscode *mc5 = new_mipcode(4, "addi", "$sp,", "$sp,", "4");
+            addmc2mcs(mc5, mcs_line);
+            mipscode *mc6 = new_mipcode(3, "move", "$t0,", "$v0", NULL);
+            addmc2mcs(mc6, mcs_line);
+            char *c_dest = find_offset(cur->dest);
+            mipscode *mc7 = new_mipcode(3, "sw", "$t0,", c_dest, NULL);
+            addmc2mcs(mc7, mcs_line);
+        }
+        break;
+        case IR_WRITE:
+        {
+            char *c_dest = find_offset(cur->dest);
+            mipscode *mc = new_mipcode(3, "lw", "$a0,", c_dest, NULL);
+            addmc2mcs(mc, mcs_line);
+            mipscode *mc1 = new_mipcode(4, "addi", "$sp,", "$sp,", "-4");
+            addmc2mcs(mc1, mcs_line);
+            mipscode *mc2 = new_mipcode(3, "sw", "$ra,", "0($sp)", NULL);
+            addmc2mcs(mc2, mcs_line);
+            mipscode *mc3 = new_mipcode(2, "jal", "read", NULL, NULL);
+            addmc2mcs(mc3, mcs_line);
+            mipscode *mc4 = new_mipcode(3, "lw", "$ra,", "0($sp)", NULL);
+            addmc2mcs(mc4, mcs_line);
+            mipscode *mc5 = new_mipcode(4, "addi", "$sp,", "$sp,", "4");
+            addmc2mcs(mc5, mcs_line);
+        }
+        break;
+        default:
+            printf("something went wrong\n");
+            exit(1);
+        }
         appendmcs2mcs(mcs, mcs_line);
         cur = cur->next;
     }
@@ -177,13 +443,15 @@ int calculate_offset(IR *ir)
         switch (cur->kind)
         {
         case IR_DEC:
+        {
             char *name = cur->dest;
             int size = atoi(cur->arg1);
             Var_or_Struct *var = lookup_Vartable(name);
             assert(var != NULL);
             var->offset = offset;
             offset += size;
-            break;
+        }
+        break;
         case IR_ASSIGN_1:
         case IR_ASSIGN_2:
         case IR_ASSIGN_ADDR:
@@ -191,6 +459,7 @@ int calculate_offset(IR *ir)
         case IR_CALL:
         case IR_PARAM:
         case IR_READ:
+        {
             char *name = cur->dest;
             Var_or_Struct *var = lookup_Vartable(name);
             if (var == NULL) // 表示这是生成中间代码过程中的新的临时变量
@@ -198,14 +467,15 @@ int calculate_offset(IR *ir)
                 Var_or_Struct *new_var = get_Var(name, NULL);
                 insert_Vartable(new_var);
                 var = lookup_Vartable(name);
-                assert(var != NULL);
             }
-            if (var->offset != -1) // 表示尚未在栈上分配空间
+            assert(var != NULL);
+            if (var->offset == -1) // 表示尚未在栈上分配空间
             {
                 var->offset = offset;
                 offset += 4;
             }
-            break;
+        }
+        break;
         default:
             break;
         }
@@ -226,7 +496,21 @@ char *find_offset(char *name)
     else
     {
         char *c_offset = (char *)malloc(sizeof(char) * 12 + 1);
-        sprintf(c_offset, "%d($sp)", sp_offset - offset);
+        sprintf(c_offset, "%d($fp)", -offset);
         return c_offset;
     }
+}
+
+char *pass_arg(int cnt, int kind)
+{
+    char *c_arg = (char *)malloc(sizeof(char) * 8 + 1);
+    if (kind == 0)
+    {
+        sprintf(c_arg, "$a%d,", cnt);
+    }
+    else
+    {
+        sprintf(c_arg, "$a%d", cnt);
+    }
+    return c_arg;
 }

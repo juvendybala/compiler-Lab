@@ -13,4 +13,5 @@ mipscodes *transcode2mipscodes(Code *code);
 void init_mipscodes(mipscodes *mcs);
 int calculate_offset(IR *ir);
 char *find_offset(char *name);
+char *pass_arg(int cnt, int kind);
 #endif
