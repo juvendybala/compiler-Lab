@@ -218,7 +218,7 @@ mipscodes *transcode2mipscodes(Code *code)
                 mipscode *mc = new_mipcode(4, "ble", "$t0,", "$t1,", dest);
                 addmc2mcs(mc, mcs_line);
             }
-            else if (strcmp(op, "<=") == 0)
+            else if (strcmp(op, ">=") == 0)
             {
                 mipscode *mc = new_mipcode(4, "bge", "$t0,", "$t1,", dest);
                 addmc2mcs(mc, mcs_line);
@@ -251,6 +251,7 @@ mipscodes *transcode2mipscodes(Code *code)
             mipscode *mc3 = new_mipcode(3, "lw", "$fp,", "0($sp)", NULL);
             addmc2mcs(mc3, mcs_line);
             mipscode *mc4 = new_mipcode(4, "addi", "$sp,", "$sp,", "4");
+            addmc2mcs(mc4, mcs_line);
             mipscode *mc5 = new_mipcode(2, "jr", "$ra", NULL, NULL);
             addmc2mcs(mc5, mcs_line);
         }
@@ -377,7 +378,7 @@ mipscodes *transcode2mipscodes(Code *code)
             addmc2mcs(mc1, mcs_line);
             mipscode *mc2 = new_mipcode(3, "sw", "$ra,", "0($sp)", NULL);
             addmc2mcs(mc2, mcs_line);
-            mipscode *mc3 = new_mipcode(2, "jal", "read", NULL, NULL);
+            mipscode *mc3 = new_mipcode(2, "jal", "write", NULL, NULL);
             addmc2mcs(mc3, mcs_line);
             mipscode *mc4 = new_mipcode(3, "lw", "$ra,", "0($sp)", NULL);
             addmc2mcs(mc4, mcs_line);
@@ -401,8 +402,8 @@ void init_mipscodes(mipscodes *mcs)
     addmc2mcs(mc1, mcs);
     mipscode *mc2 = new_mipcode(3, "_ret:", ".asciiz", "\"\\n\"", NULL);
     addmc2mcs(mc2, mcs);
-    mipscode *mc3 = new_mipcode(2, ".global", "main", NULL, NULL);
-    addmc2mcs(mc3, mcs);
+    // mipscode *mc3 = new_mipcode(2, ".global", "main", NULL, NULL);
+    // addmc2mcs(mc3, mcs);
     mipscode *mc4 = new_mipcode(1, ".text", NULL, NULL, NULL);
     addmc2mcs(mc4, mcs);
     mipscode *mc5 = new_mipcode(1, "read:", NULL, NULL, NULL);
@@ -496,7 +497,7 @@ char *find_offset(char *name)
     else
     {
         char *c_offset = (char *)malloc(sizeof(char) * 12 + 1);
-        sprintf(c_offset, "%d($fp)", -offset);
+        sprintf(c_offset, "%d($fp)", -offset - 4);
         return c_offset;
     }
 }
